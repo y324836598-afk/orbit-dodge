@@ -1,51 +1,62 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
+<meta name="theme-color" content="#0b0d17">
+<meta property="og:title" content="Orbit Dodge"><meta property="og:description" content="Tap to reverse your orbit. Grab gold, dodge rocks. One file, 5 seconds to learn.">
 <title>Orbit Dodge</title>
 <style>html,body{margin:0;height:100%;background:#0b0d17;overflow:hidden;touch-action:manipulation;-webkit-user-select:none;user-select:none}canvas{display:block;width:100%;height:100%}</style>
 </head><body><canvas id="c"></canvas>
 <script>
-// Orbit Dodge: tap anywhere to reverse your orbit direction. Survive as long as you can.
+// Orbit Dodge: tap to reverse your orbit. Grab gold orbs, dodge rocks, chain pickups for a combo.
 const c=document.getElementById('c'),g=c.getContext('2d');
-let W,H,cx,cy,R;
-function fit(){const d=devicePixelRatio||1;W=c.width=innerWidth*d;H=c.height=innerHeight*d;cx=W/2;cy=H/2;R=Math.min(W,H)*.3}
+let W,H,cx,cy,R,u;
+function fit(){const d=devicePixelRatio||1;W=c.width=innerWidth*d;H=c.height=innerHeight*d;cx=W/2;cy=H/2;R=Math.min(W,H)*.3;u=Math.min(W,H)/500}
 addEventListener('resize',fit);fit();
-let a,dir,speed,rocks,t,alive,best=+localStorage.orbitBest||0,spawn,sparks;
-function reset(){a=0;dir=1;speed=2.2;rocks=[];sparks=[];t=0;alive=true;spawn=0}
+let a,dir,rocks,orbs,sparks,t,pts,combo,comboT,alive,spawn,orbT,shake,best=+localStorage.orbitBest2||0;
+function reset(){a=0;dir=1;rocks=[];orbs=[];sparks=[];t=0;pts=0;combo=0;comboT=0;alive=true;spawn=0;orbT=90;shake=0}
 reset();
-function press(e){e.preventDefault();if(!alive){reset();return}dir=-dir}
+let ac;function tone(f,d,ty,v){try{ac=ac||new (window.AudioContext||window.webkitAudioContext)();const o=ac.createOscillator(),k=ac.createGain();o.type=ty||'sine';o.frequency.value=f;k.gain.value=v||.08;k.gain.exponentialRampToValueAtTime(.001,ac.currentTime+d);o.connect(k);k.connect(ac.destination);o.start();o.stop(ac.currentTime+d)}catch(e){}}
+function press(e){e.preventDefault();if(!alive){reset();tone(440,.1);return}dir=-dir;tone(260,.05,'triangle',.05)}
 addEventListener('pointerdown',press);
 addEventListener('keydown',e=>{if(e.code=='Space'||e.code=='Enter')press(e)});
-function boom(x,y){for(let i=0;i<30;i++){const r=Math.random()*6.28,s=Math.random()*6+1;sparks.push({x,y,vx:Math.cos(r)*s,vy:Math.sin(r)*s,l:1})}}
+function burst(x,y,col,n){for(let i=0;i<n;i++){const r=Math.random()*6.28,s=Math.random()*6+1;sparks.push({x,y,vx:Math.cos(r)*s*u,vy:Math.sin(r)*s*u,l:1,col})}}
+const ang=(p,q)=>{let d=Math.abs(p-q)%6.2832;return d>3.1416?6.2832-d:d};
 let last=performance.now();
 function loop(now){
   const dt=Math.min((now-last)/16.67,3);last=now;
+  const px=cx+Math.cos(a)*R,py=cy+Math.sin(a)*R,pr=9*u;
   if(alive){
-    t+=dt/60;a+=dir*speed*dt*.012;
+    t+=dt/60;a+=dir*(2.2+Math.min(t*.01,1))*dt*.012;pts+=dt/6;
+    if(comboT>0){comboT-=dt;if(comboT<=0)combo=0}
     spawn-=dt;
     if(spawn<=0){
-      spawn=Math.max(14,60-t*1.6);
-      const r=Math.random()*6.28,d=Math.hypot(W,H)/2+30,tr=R+(Math.random()<.5?-1:1)*R*.0;
-      const px=cx+Math.cos(a+Math.random()*6.28)*R,py=cy+Math.sin(a+Math.random()*6.28)*R;
-      const sx=cx+Math.cos(r)*d,sy=cy+Math.sin(r)*d,L=Math.hypot(px-sx,py-sy),v=(2.5+t*.05)*(Math.min(W,H)/500);
-      rocks.push({x:sx,y:sy,vx:(px-sx)/L*v,vy:(py-sy)/L*v,s:(10+Math.random()*14)*(Math.min(W,H)/500)});
+      spawn=Math.max(12,60-t*1.6);
+      const r=Math.random()*6.28,d=Math.hypot(W,H)/2+30;
+      const tx=cx+Math.cos(a+dir*(.4+Math.random()*1.6))*R,ty=cy+Math.sin(a+dir*(.4+Math.random()*1.6))*R;
+      const sx=cx+Math.cos(r)*d,sy=cy+Math.sin(r)*d,L=Math.hypot(tx-sx,ty-sy),v=(2.5+t*.05)*u;
+      rocks.push({x:sx,y:sy,vx:(tx-sx)/L*v,vy:(ty-sy)/L*v,s:(10+Math.random()*14)*u});
     }
-    const px=cx+Math.cos(a)*R,py=cy+Math.sin(a)*R,pr=9*(Math.min(W,H)/500);
+    orbT-=dt;
+    if(orbT<=0){orbT=100+Math.random()*60;orbs.push({a:a+dir*(1+Math.random()*3),l:360})}
+    for(const o of orbs){o.l-=dt;if(ang(o.a,a)<.2){o.l=0;combo++;comboT=150;const gain=10*combo;pts+=gain;burst(cx+Math.cos(o.a)*R,cy+Math.sin(o.a)*R,'#ffd75e',16);tone(520+combo*70,.15,'sine',.1)}}
+    orbs=orbs.filter(o=>o.l>0);
     for(const k of rocks){k.x+=k.vx*dt;k.y+=k.vy*dt;
-      if(Math.hypot(k.x-px,k.y-py)<k.s+pr){alive=false;boom(px,py);if(t>best){best=t;localStorage.orbitBest=best}}}
+      if(Math.hypot(k.x-px,k.y-py)<k.s+pr){alive=false;shake=14;burst(px,py,'#5cf2c8',34);tone(110,.5,'sawtooth',.12);if(pts>best){best=pts;localStorage.orbitBest2=best}}}
     rocks=rocks.filter(k=>Math.hypot(k.x-cx,k.y-cy)<Math.hypot(W,H)/2+60);
   }
+  g.setTransform(1,0,0,1,0,0);
   g.fillStyle='rgba(11,13,23,.35)';g.fillRect(0,0,W,H);
-  const u=Math.min(W,H)/500;
+  if(shake>0){g.translate((Math.random()-.5)*shake*u,(Math.random()-.5)*shake*u);shake-=1}
   g.strokeStyle='#26304f';g.lineWidth=2*u;g.beginPath();g.arc(cx,cy,R,0,6.283);g.stroke();
-  g.fillStyle='#ff5d73';for(const k of rocks){g.beginPath();g.arc(k.x,k.y,k.s,0,6.283);g.fill()}
-  if(alive){g.fillStyle='#5cf2c8';g.beginPath();g.arc(cx+Math.cos(a)*R,cy+Math.sin(a)*R,9*u,0,6.283);g.fill()}
-  for(const s of sparks){s.x+=s.vx;s.y+=s.vy;s.l-=.02;g.globalAlpha=Math.max(s.l,0);g.fillStyle='#5cf2c8';g.fillRect(s.x,s.y,4*u,4*u)}
+  g.fillStyle='#ffd75e';for(const o of orbs){g.globalAlpha=Math.min(o.l/60,1);g.beginPath();g.arc(cx+Math.cos(o.a)*R,cy+Math.sin(o.a)*R,8*u,0,6.283);g.fill()}
+  g.globalAlpha=1;g.fillStyle='#ff5d73';for(const k of rocks){g.beginPath();g.arc(k.x,k.y,k.s,0,6.283);g.fill()}
+  if(alive){g.fillStyle='#5cf2c8';g.beginPath();g.arc(px,py,pr,0,6.283);g.fill()}
+  for(const s of sparks){s.x+=s.vx;s.y+=s.vy;s.l-=.02;g.globalAlpha=Math.max(s.l,0);g.fillStyle=s.col;g.fillRect(s.x,s.y,4*u,4*u)}
   g.globalAlpha=1;sparks=sparks.filter(s=>s.l>0);
-  g.fillStyle='#e8ecff';g.textAlign='center';g.font=`${40*u}px sans-serif`;
-  g.fillText(t.toFixed(1)+'s',cx,cy+14*u);
+  g.fillStyle='#e8ecff';g.textAlign='center';g.font=`${44*u}px sans-serif`;
+  g.fillText(Math.floor(pts),cx,cy+14*u);
   g.font=`${16*u}px sans-serif`;g.fillStyle='#7c86b0';
-  g.fillText(alive?'tap to reverse':'tap to retry  -  best '+best.toFixed(1)+'s',cx,cy+44*u);
+  g.fillText(alive?(combo>1?'combo x'+combo:'tap to reverse - grab the gold'):'tap to retry  -  best '+Math.floor(best),cx,cy+44*u);
   requestAnimationFrame(loop)}
 requestAnimationFrame(loop);
 </script></body></html>
